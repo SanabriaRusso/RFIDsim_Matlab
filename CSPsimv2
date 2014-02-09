@@ -1,0 +1,152 @@
+function [out] = CSPsim(nexperiments, alien_file, mp_file)
+
+% Code simulating EPC Gen2 arbitration rounds using Alien PRNG, MP-PRNG, and CSP (using MP_PRNG).
+% The goal is the number of necessary rounds for reading all tags.
+% Joan Melia-Segui, joan.melia@upf.edu
+% 2013/03/07
+
+tic
+
+%maxtags = (2^15)/2-1; % #tags from 2 to (Q_max=2^15)/2-1.
+maxtags = 500;
+
+out = zeros(3,maxtags,nexperiments);
+
+ap = fopen(alien_file);
+mp = fopen(mp_file);
+
+for i=1:nexperiments % #experiments.
+
+	fprintf('%i\n',i)
+
+	for j=2:maxtags % #tags.
+
+		q = ceil(log2(j)); % Q is (the min. for the selected number of tags).
+
+		for k=1:3 % #systems.
+
+			arbitratrion_round = 0;
+			scenario = zeros(2,j);
+
+			while sum(scenario(2,:)) < size(scenario,2) % i.e. all tags identified at some point.
+		
+				switch k
+
+					case 1 % Alien
+                        
+                        for l=1:size(scenario,2)
+                            
+                            if(feof(ap)==1)
+        
+                                fclose(ap);
+                                ap = fopen(alien_file, 'r');
+        
+                            end
+                            
+                            scenario(1,l) = bin2dec(fscanf(ap,'%c',q));
+                            
+                        end
+
+					% scenario(1,:) = bitand(uint16(rand(1,size(scenario,2))*65535),2^q-1);
+
+					case 2 % MP-PRNG
+                        
+                        for l=1:size(scenario,2)
+                            
+                            if(feof(mp)==1)
+        
+                                fclose(mp);
+                                mp = fopen(mp_file, 'r');
+        
+                            end
+                            
+                            scenario(1,l) = bin2dec(fscanf(mp,'%c',q));
+                            
+                        end
+
+					% scenario(1,:) = bitand(uint16(rand(1,size(scenario,2))*65535),2^q-1);
+
+					case 3 % CSP
+
+					if arbitratrion_round == 0
+	
+                        for l=1:size(scenario,2)
+                            
+                            if(feof(mp)==1)
+        
+                                fclose(mp);
+                                mp = fopen(mp_file, 'r');
+        
+                            end
+                            
+                            scenario(1,l) = bin2dec(fscanf(mp,'%c',q));
+                            
+                        end
+
+                        % scenario(1,:) = bitand(uint16(rand(1,size(scenario,2))*65535),2^q-1);
+
+					else
+
+						prev_scenario = scenario(1,:);
+
+						for z=1:size(scenario,2)
+				
+							if sum(prev_scenario(1,:) == prev_scenario(1,z)) > 1
+                                
+                                if(feof(mp)==1)
+        
+                                    fclose(mp);
+                                    mp = fopen(mp_file, 'r');
+        
+                                end
+                            
+                                scenario(1,z) = bin2dec(fscanf(mp,'%c',q));
+
+							end
+
+						end
+
+					end
+
+				end
+
+				arbitratrion_round = arbitratrion_round + 1;
+
+				for z=1:size(scenario,2)
+				
+					if sum(scenario(1,:)==scenario(1,z)) == 1
+
+						% Index all succesfuly identified.
+						scenario(2,z) = 1;
+
+					end
+
+				end
+
+			end
+
+			out(k,j,i) = arbitratrion_round;
+
+		end
+
+	end
+
+end
+
+fclose(ap);
+fclose(mp);
+
+p1 = plot(mean(out(1,:,:),3));
+hold on
+p2=plot(mean(out(2,:,:),3));
+set(p2,'Color','red')
+p3=plot(mean(out(3,:,:),3));
+set(p3,'Color','green')
+title('Arbitration rounds to successfuly identify all tags')
+xlabel('Tags')
+ylabel('Arbitration rounds')
+hold off
+
+toc
+
+% End.
